@@ -26,13 +26,6 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'No text found in the PDF.' });
     }
 
-    // Parse health metrics from the extracted text
-    const metrics = parseHealthMetrics(extractedText);
-    if (!metrics) {
-      return res.status(400).json({
-        error: 'No valid health metrics found in the report.',
-      });
-    }
 
     // Generate the AI prompt using metrics
     const prompt = generatePrompt(metrics);
