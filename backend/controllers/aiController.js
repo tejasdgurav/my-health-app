@@ -9,7 +9,7 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error('OpenAI API key is missing');
 }
 
-// OpenAI configuration (new initialization)
+// Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -23,9 +23,8 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Extract text from the file
+    // Extract text from the uploaded file (supports PDF and images)
     let extractedText = '';
-
     if (file.mimetype === 'application/pdf') {
       extractedText = await extractTextFromPDF(file.buffer);
     } else if (['image/jpeg', 'image/png'].includes(file.mimetype)) {
@@ -34,15 +33,21 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'Unsupported file type' });
     }
 
-    // Parse health metrics from extracted text
+    // Parse health metrics from the extracted text
     const metrics = parseHealthMetrics(extractedText, userInfo);
 
-    // Generate AI prompt with patient information and metrics
+    // Validate parsed metrics for completeness
+    if (Object.keys(metrics).length === 0) {
+      return res.status(400).json({ error: 'No valid health metrics found in the report' });
+    }
+
+    // Generate the AI prompt using patient info and metrics
     const prompt = generatePrompt(userInfo, metrics);
 
-    // Get AI-generated summary
+    // Generate the AI summary
     const summary = await getAISummary(prompt);
 
+    // Send the summary back as the response
     res.json({ summary });
   } catch (error) {
     console.error('Error processing report:', error.message);
@@ -57,7 +62,7 @@ const extractTextFromPDF = async (buffer) => {
     return data.text;
   } catch (error) {
     console.error('Error extracting text from PDF:', error.message);
-    throw new Error('PDF processing failed');
+    throw new Error('Failed to process PDF');
   }
 };
 
@@ -67,7 +72,7 @@ const extractTextFromImage = async (buffer) => {
     const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
     return text;
   } catch (error) {
-    console.error('Tesseract error:', error.message);
+    console.error('Error with Tesseract:', error.message);
     throw new Error('Image recognition failed');
   }
 };
@@ -93,10 +98,9 @@ const parseHealthMetrics = (text, userInfo) => {
     if (lowerLine.includes('ast') || lowerLine.includes('sgot')) {
       metrics.ast = extractValue(line);
     }
-    // Add more metrics as necessary
+    // Add more health metrics extraction as needed
   });
 
-  // Filter data if the report contains combined results
   return metrics;
 };
 
@@ -106,9 +110,10 @@ const extractValue = (line) => {
   return match ? parseFloat(match[0]) : null;
 };
 
-// Generate a prompt to send to OpenAI with patient info and metrics
+// Generate a prompt for OpenAI based on user info and health metrics
 const generatePrompt = (userInfo, metrics) => {
-  let prompt = `You are a helpful assistant providing an empathetic health summary for a patient. Use the following patient information and lab results to create a summary organized under the headings "What is Good", "What Needs Attention", "What is Critical", and "Next Steps". Use a comforting and positive tone.
+  let prompt = `
+You are a medical expert providing a health summary for a patient based on their lab report. Please use a friendly and empathetic tone. The summary should be structured in an easy-to-read format, focusing on what is going well, what needs attention, and any critical issues.
 
 Patient Information:
 Name: ${userInfo.name}
@@ -119,24 +124,33 @@ Known Medical Conditions: ${userInfo.conditions}
 Lab Results:
 `;
 
+  // Add the health metrics to the prompt
   for (const [key, value] of Object.entries(metrics)) {
     prompt += `${key}: ${value}\n`;
   }
 
   prompt += `
-Provide practical, personalized advice, and always end with a positive and hopeful note.`;
+Please follow this structure:
+1. Health Summary
+2. What is Good
+3. What Needs Attention
+4. What is Critical
+5. Next Steps
+
+Provide practical advice with a positive and hopeful tone.
+  `;
 
   return prompt;
 };
 
-// Send the generated prompt to OpenAI and get a summary back
+// Get a health summary from OpenAI
 const getAISummary = async (prompt) => {
   try {
     const response = await openai.chat.completions.create({
-      model: 'chatgpt-4o-latest',
+      model: 'gpt-4',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
-      temperature: 0.7,
+      temperature: 0.5,  // Lower temperature for more factual output
     });
     return response.choices[0].message.content.trim();
   } catch (error) {
