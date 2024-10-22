@@ -131,3 +131,6 @@ const getAISummary = async (prompt) => {
     throw new Error('AI processing failed');
   }
 };
+
+console.log(req.file); // Logs file information
+console.log(req.body.userInfo); // Logs userInfo
