@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 const fs = require('fs');
 const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
@@ -9,11 +9,10 @@ if (!process.env.OPENAI_API_KEY) {
   throw new Error('OpenAI API key is missing');
 }
 
-// OpenAI configuration
-const configuration = new Configuration({
+// OpenAI configuration (new initialization)
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 exports.analyzeReport = async (req, res) => {
   try {
@@ -133,13 +132,13 @@ Provide practical, personalized advice, and always end with a positive and hopef
 // Send the generated prompt to OpenAI and get a summary back
 const getAISummary = async (prompt) => {
   try {
-    const response = await openai.createCompletion({
-      model: 'gpt-4',
-      prompt: prompt,
+    const response = await openai.chat.completions.create({
+      model: 'chatgpt-4o-latest',
+      messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
       temperature: 0.7,
     });
-    return response.data.choices[0].text.trim();
+    return response.choices[0].message.content.trim();
   } catch (error) {
     console.error('Error with AI API:', error.response ? error.response.data : error.message);
     throw new Error('AI processing failed');
