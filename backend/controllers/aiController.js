@@ -1,39 +1,48 @@
+require('dotenv').config();
 const OpenAI = require('openai');
+const fs = require('fs');
+const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
 
-// Initialize OpenAI with the API key
+// Ensure OpenAI API key is set
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('OpenAI API key is missing');
+}
+
+// OpenAI configuration (new initialization)
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 exports.analyzeReport = async (req, res) => {
   try {
     const file = req.file;
+    const userInfo = JSON.parse(req.body.userInfo);
 
-    // Check if file is uploaded
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Check if the file is a valid PDF
-    if (file.mimetype !== 'application/pdf') {
-      return res.status(400).json({ error: 'Unsupported file type. Only PDF is allowed.' });
+    // Extract text from the file
+    let extractedText = '';
+
+    if (file.mimetype === 'application/pdf') {
+      extractedText = await extractTextFromPDF(file.buffer);
+    } else if (['image/jpeg', 'image/png'].includes(file.mimetype)) {
+      extractedText = await extractTextFromImage(file.buffer);
+    } else {
+      return res.status(400).json({ error: 'Unsupported file type' });
     }
 
-    // Extract text from the uploaded PDF
-    const extractedText = await extractTextFromPDF(file.buffer);
-    if (!extractedText) {
-      return res.status(400).json({ error: 'No text found in the PDF.' });
-    }
+    // Parse health metrics from extracted text
+    const metrics = parseHealthMetrics(extractedText, userInfo);
 
+    // Generate AI prompt with patient information and metrics
+    const prompt = generatePrompt(userInfo, metrics);
 
-    // Generate the AI prompt using metrics
-    const prompt = generatePrompt(metrics);
-
-    // Generate the AI summary
+    // Get AI-generated summary
     const summary = await getAISummary(prompt);
 
-    // Send the summary back as the response
     res.json({ summary });
   } catch (error) {
     console.error('Error processing report:', error.message);
@@ -45,44 +54,67 @@ exports.analyzeReport = async (req, res) => {
 const extractTextFromPDF = async (buffer) => {
   try {
     const data = await pdfParse(buffer);
-    return data.text || ''; // Return empty string if no text found
+    return data.text;
   } catch (error) {
     console.error('Error extracting text from PDF:', error.message);
-    return ''; // Return empty string on error to avoid crashing
+    throw new Error('PDF processing failed');
+  }
+};
+
+// Extract text from an image buffer using Tesseract
+const extractTextFromImage = async (buffer) => {
+  try {
+    const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
+    return text;
+  } catch (error) {
+    console.error('Tesseract error:', error.message);
+    throw new Error('Image recognition failed');
   }
 };
 
 // Parse health metrics from the extracted text
-const parseHealthMetrics = (text) => {
+const parseHealthMetrics = (text, userInfo) => {
   const metrics = {};
   const lines = text.split('\n');
 
   lines.forEach((line) => {
-    const lowerLine = line.toLowerCase().trim();
+    const lowerLine = line.toLowerCase();
 
-    // Check for common health metrics; use flexible matching
+    // Extract common health metrics
     if (lowerLine.includes('glucose')) {
       metrics.glucose = extractValue(line);
     }
     if (lowerLine.includes('cholesterol')) {
       metrics.cholesterol = extractValue(line);
     }
-    // Add more metrics as needed, but keep it simple
+    if (lowerLine.includes('alt') || lowerLine.includes('sgpt')) {
+      metrics.alt = extractValue(line);
+    }
+    if (lowerLine.includes('ast') || lowerLine.includes('sgot')) {
+      metrics.ast = extractValue(line);
+    }
+    // Add more metrics as necessary
   });
 
-  return Object.keys(metrics).length > 0 ? metrics : null; // Return null if no metrics found
+  // Filter data if the report contains combined results
+  return metrics;
 };
 
 // Extract numerical value from a line of text
 const extractValue = (line) => {
   const match = line.match(/(\d+\.?\d*)/);
-  return match ? parseFloat(match[0]) : null; // Return number or null
+  return match ? parseFloat(match[0]) : null;
 };
 
-// Generate a prompt for OpenAI based on health metrics
-const generatePrompt = (metrics) => {
-  let prompt = `
-You are a medical expert providing a health summary based on the following lab results:
+// Generate a prompt to send to OpenAI with patient info and metrics
+const generatePrompt = (userInfo, metrics) => {
+  let prompt = `You are a helpful assistant providing an empathetic health summary for a patient. Use the following patient information and lab results to create a summary organized under the headings "What is Good", "What Needs Attention", "What is Critical", and "Next Steps". Use a comforting and positive tone.
+
+Patient Information:
+Name: ${userInfo.name}
+Age: ${userInfo.age}
+Gender: ${userInfo.gender}
+Known Medical Conditions: ${userInfo.conditions}
 
 Lab Results:
 `;
@@ -92,24 +124,23 @@ Lab Results:
   }
 
   prompt += `
-Provide practical advice with a positive tone.
-  `;
+Provide practical, personalized advice, and always end with a positive and hopeful note.`;
 
   return prompt;
 };
 
-// Get a health summary from OpenAI
+// Send the generated prompt to OpenAI and get a summary back
 const getAISummary = async (prompt) => {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
-      temperature: 0.5,
+      temperature: 0.7,
     });
     return response.choices[0].message.content.trim();
   } catch (error) {
-    console.error('Error with AI API:', error.message);
+    console.error('Error with AI API:', error.response ? error.response.data : error.message);
     throw new Error('AI processing failed');
   }
 };
