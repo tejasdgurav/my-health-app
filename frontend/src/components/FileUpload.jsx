@@ -50,12 +50,20 @@ function FileUpload({ file, setFile, userInfo, setSummary }) {
       });
       setSummary(response.data.summary);
     } catch (error) {
-      console.error('Error processing file:', error);
+    // Detailed error handling
+      if (error.response) {
+        console.error('Error data:', error.response.data); // Log response data
+        console.error('Error status:', error.response.status); // Log status code (e.g., 400, 500)
+        console.error('Error headers:', error.response.headers); // Log headers
+      } else {
+        console.error('Error message:', error.message); // Log general error message
+      }
       alert('An error occurred while processing your file.');
     } finally {
       setIsProcessing(false);
     }
   };
+
 
   const handleDragOver = (e) => {
     e.preventDefault();
