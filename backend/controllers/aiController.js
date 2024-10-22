@@ -53,8 +53,9 @@ const extractTextFromPDF = async (buffer) => {
   try {
     const data = await pdfParse(buffer);
     return data.text || ''; // Return empty string if no text found
-  } catch {
-    return null; // Return null on error to handle gracefully
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error.message);
+    return ''; // Return empty string on error to avoid crashing
   }
 };
 
@@ -66,10 +67,11 @@ const parseHealthMetrics = (text) => {
   lines.forEach((line) => {
     const lowerLine = line.toLowerCase().trim();
 
-    // Extract only a few essential health metrics
+    // Check for common health metrics; use flexible matching
     if (lowerLine.includes('glucose')) {
       metrics.glucose = extractValue(line);
-    } else if (lowerLine.includes('cholesterol')) {
+    }
+    if (lowerLine.includes('cholesterol')) {
       metrics.cholesterol = extractValue(line);
     }
     // Add more metrics as needed, but keep it simple
@@ -81,7 +83,7 @@ const parseHealthMetrics = (text) => {
 // Extract numerical value from a line of text
 const extractValue = (line) => {
   const match = line.match(/(\d+\.?\d*)/);
-  return match ? parseFloat(match[0]) : null;
+  return match ? parseFloat(match[0]) : null; // Return number or null
 };
 
 // Generate a prompt for OpenAI based on health metrics
