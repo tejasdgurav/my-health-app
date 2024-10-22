@@ -44,7 +44,9 @@ exports.analyzeReport = async (req, res) => {
 
     // Validate parsed metrics for completeness
     if (Object.keys(metrics).length === 0) {
-      return res.status(400).json({ error: 'No valid health metrics found in the report' });
+      return res.status(400).json({
+        error: 'No valid health metrics found in the report. Ensure the report contains standard health metrics.',
+      });
     }
 
     // Generate the AI prompt using patient info and metrics
@@ -65,17 +67,22 @@ exports.analyzeReport = async (req, res) => {
 const extractTextFromPDF = async (buffer) => {
   try {
     const data = await pdfParse(buffer);
+    if (!data.text) {
+      throw new Error('No text found in PDF. It might be an image-based PDF.');
+    }
     return data.text;
   } catch (error) {
     console.error('Error extracting text from PDF:', error.message);
-    throw new Error('Failed to process PDF');
+    throw new Error('Failed to process PDF. Ensure the PDF contains readable text.');
   }
 };
 
 // Extract text from an image buffer using Tesseract
 const extractTextFromImage = async (buffer) => {
   try {
-    const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
+    const { data: { text } } = await Tesseract.recognize(buffer, 'eng', {
+      logger: (m) => console.log(m), // Log progress for large files
+    });
     return text;
   } catch (error) {
     console.error('Error with Tesseract:', error.message);
@@ -89,13 +96,13 @@ const parseHealthMetrics = (text, userInfo) => {
   const lines = text.split('\n');
 
   lines.forEach((line) => {
-    const lowerLine = line.toLowerCase();
+    const lowerLine = line.toLowerCase().trim();
 
-    // Attempt to extract common health metrics
-    if (lowerLine.includes('glucose') || lowerLine.includes('glc')) {
+    // Attempt to extract common health metrics with expanded keywords
+    if (lowerLine.includes('glucose') || lowerLine.includes('blood sugar') || lowerLine.includes('glc')) {
       metrics.glucose = extractValue(line);
     }
-    if (lowerLine.includes('cholesterol') || lowerLine.includes('chol')) {
+    if (lowerLine.includes('cholesterol') || lowerLine.includes('ldl') || lowerLine.includes('hdl') || lowerLine.includes('total cholesterol')) {
       metrics.cholesterol = extractValue(line);
     }
     if (lowerLine.includes('alt') || lowerLine.includes('sgpt')) {
@@ -104,7 +111,7 @@ const parseHealthMetrics = (text, userInfo) => {
     if (lowerLine.includes('ast') || lowerLine.includes('sgot')) {
       metrics.ast = extractValue(line);
     }
-    // Add more health metrics extraction as needed (with various aliases)
+    // Add more health metrics extraction as needed
   });
 
   return metrics;
@@ -153,10 +160,10 @@ Provide practical advice with a positive and hopeful tone.
 const getAISummary = async (prompt) => {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
-      temperature: 0.5,  // Lower temperature for more factual output
+      temperature: 0.5, // Lower temperature for more factual output
     });
     return response.choices[0].message.content.trim();
   } catch (error) {
