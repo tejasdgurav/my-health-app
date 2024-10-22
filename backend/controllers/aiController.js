@@ -11,6 +11,10 @@ exports.analyzeReport = async (req, res) => {
     const file = req.file;
     const userInfo = JSON.parse(req.body.userInfo);
 
+    // Logging req.file and req.body.userInfo for debugging purposes
+    console.log(req.file); // Logs file information
+    console.log(req.body.userInfo); // Logs userInfo
+
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -131,6 +135,3 @@ const getAISummary = async (prompt) => {
     throw new Error('AI processing failed');
   }
 };
-
-console.log(req.file); // Logs file information
-console.log(req.body.userInfo); // Logs userInfo
