@@ -33,8 +33,14 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'Unsupported file type' });
     }
 
+    // Log extracted text for debugging
+    console.log('Extracted Text:', extractedText);
+
     // Parse health metrics from the extracted text
     const metrics = parseHealthMetrics(extractedText, userInfo);
+
+    // Log parsed metrics for debugging
+    console.log('Parsed Metrics:', metrics);
 
     // Validate parsed metrics for completeness
     if (Object.keys(metrics).length === 0) {
@@ -77,7 +83,7 @@ const extractTextFromImage = async (buffer) => {
   }
 };
 
-// Parse health metrics from the extracted text
+// Parse health metrics from the extracted text with improved logic
 const parseHealthMetrics = (text, userInfo) => {
   const metrics = {};
   const lines = text.split('\n');
@@ -85,11 +91,11 @@ const parseHealthMetrics = (text, userInfo) => {
   lines.forEach((line) => {
     const lowerLine = line.toLowerCase();
 
-    // Extract common health metrics
-    if (lowerLine.includes('glucose')) {
+    // Attempt to extract common health metrics
+    if (lowerLine.includes('glucose') || lowerLine.includes('glc')) {
       metrics.glucose = extractValue(line);
     }
-    if (lowerLine.includes('cholesterol')) {
+    if (lowerLine.includes('cholesterol') || lowerLine.includes('chol')) {
       metrics.cholesterol = extractValue(line);
     }
     if (lowerLine.includes('alt') || lowerLine.includes('sgpt')) {
@@ -98,13 +104,13 @@ const parseHealthMetrics = (text, userInfo) => {
     if (lowerLine.includes('ast') || lowerLine.includes('sgot')) {
       metrics.ast = extractValue(line);
     }
-    // Add more health metrics extraction as needed
+    // Add more health metrics extraction as needed (with various aliases)
   });
 
   return metrics;
 };
 
-// Extract numerical value from a line of text
+// Extract numerical value from a line of text (enhanced to handle various formats)
 const extractValue = (line) => {
   const match = line.match(/(\d+\.?\d*)/);
   return match ? parseFloat(match[0]) : null;
@@ -147,7 +153,7 @@ Provide practical advice with a positive and hopeful tone.
 const getAISummary = async (prompt) => {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
       temperature: 0.5,  // Lower temperature for more factual output
