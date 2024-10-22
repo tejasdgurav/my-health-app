@@ -3,41 +3,39 @@ const pdfParse = require('pdf-parse');
 
 // Initialize OpenAI with the API key
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here', // Ensure the API key is set directly if needed
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
 });
 
 exports.analyzeReport = async (req, res) => {
   try {
     const file = req.file;
-    const userInfo = JSON.parse(req.body.userInfo);
 
-    // Logging req.file and req.body.userInfo for debugging purposes
-    console.log(req.file); // Logs file information
-    console.log(req.body.userInfo); // Logs userInfo
-
+    // Check if file is uploaded
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Extract text from PDF only (remove image support for simplicity)
+    // Check if the file is a valid PDF
     if (file.mimetype !== 'application/pdf') {
       return res.status(400).json({ error: 'Unsupported file type. Only PDF is allowed.' });
     }
-    
+
     // Extract text from the uploaded PDF
     const extractedText = await extractTextFromPDF(file.buffer);
+    if (!extractedText) {
+      return res.status(400).json({ error: 'No text found in the PDF.' });
+    }
 
     // Parse health metrics from the extracted text
-    const metrics = parseHealthMetrics(extractedText, userInfo);
-
-    if (Object.keys(metrics).length === 0) {
+    const metrics = parseHealthMetrics(extractedText);
+    if (!metrics) {
       return res.status(400).json({
-        error: 'No valid health metrics found in the report. Ensure the report contains standard health metrics.',
+        error: 'No valid health metrics found in the report.',
       });
     }
 
-    // Generate the AI prompt using patient info and metrics
-    const prompt = generatePrompt(userInfo, metrics);
+    // Generate the AI prompt using metrics
+    const prompt = generatePrompt(metrics);
 
     // Generate the AI summary
     const summary = await getAISummary(prompt);
@@ -54,40 +52,30 @@ exports.analyzeReport = async (req, res) => {
 const extractTextFromPDF = async (buffer) => {
   try {
     const data = await pdfParse(buffer);
-    if (!data.text) {
-      throw new Error('No text found in PDF.');
-    }
-    return data.text;
-  } catch (error) {
-    console.error('Error extracting text from PDF:', error.message);
-    throw new Error('Failed to process PDF.');
+    return data.text || ''; // Return empty string if no text found
+  } catch {
+    return null; // Return null on error to handle gracefully
   }
 };
 
 // Parse health metrics from the extracted text
-const parseHealthMetrics = (text, userInfo) => {
+const parseHealthMetrics = (text) => {
   const metrics = {};
   const lines = text.split('\n');
 
   lines.forEach((line) => {
     const lowerLine = line.toLowerCase().trim();
 
-    // Attempt to extract common health metrics
+    // Extract only a few essential health metrics
     if (lowerLine.includes('glucose')) {
       metrics.glucose = extractValue(line);
-    }
-    if (lowerLine.includes('cholesterol')) {
+    } else if (lowerLine.includes('cholesterol')) {
       metrics.cholesterol = extractValue(line);
     }
-    if (lowerLine.includes('alt')) {
-      metrics.alt = extractValue(line);
-    }
-    if (lowerLine.includes('ast')) {
-      metrics.ast = extractValue(line);
-    }
+    // Add more metrics as needed, but keep it simple
   });
 
-  return metrics;
+  return Object.keys(metrics).length > 0 ? metrics : null; // Return null if no metrics found
 };
 
 // Extract numerical value from a line of text
@@ -96,15 +84,10 @@ const extractValue = (line) => {
   return match ? parseFloat(match[0]) : null;
 };
 
-// Generate a prompt for OpenAI based on user info and health metrics
-const generatePrompt = (userInfo, metrics) => {
+// Generate a prompt for OpenAI based on health metrics
+const generatePrompt = (metrics) => {
   let prompt = `
-You are a medical expert providing a health summary for a patient based on their lab report. Please use a friendly and empathetic tone.
-
-Patient Information:
-Name: ${userInfo.name}
-Age: ${userInfo.age}
-Gender: ${userInfo.gender}
+You are a medical expert providing a health summary based on the following lab results:
 
 Lab Results:
 `;
