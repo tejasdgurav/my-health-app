@@ -96,7 +96,6 @@ const parseHealthMetrics = (text, userInfo) => {
     // Add more metrics as necessary
   });
 
-  // Filter data if the report contains combined results
   return metrics;
 };
 
@@ -108,7 +107,28 @@ const extractValue = (line) => {
 
 // Generate a prompt to send to OpenAI with patient info and metrics
 const generatePrompt = (userInfo, metrics) => {
-  let prompt = `You are a helpful assistant providing an empathetic health summary for a patient. Use the following patient information and lab results to create a summary organized under the headings "What is Good", "What Needs Attention", "What is Critical", and "Next Steps". Use a comforting and positive tone.
+  let prompt = `You are a medical expert providing a simple, empathetic one-page health summary for a patient based on their medical report. Use the following structure:
+
+1. Health Summary:
+Start with the patient's name, age, and a brief overview of their main health conditions. Mention any specific symptoms and explain how their condition relates to these symptoms. Provide a short assessment of their BMI and blood pressure.
+
+2. What’s Good:
+Highlight the positive aspects of the patient's health, such as well-controlled conditions or healthy values in lab results.
+
+3. What Needs Attention:
+Point out any aspects of their health that are slightly out of range, like elevated BMI or blood pressure, and explain why these need attention.
+
+4. What’s Critical:
+Identify any serious concerns the patient should be aware of, and recommend immediate action if needed.
+
+5. What You Should Do:
+Provide clear, actionable steps the patient should take to maintain or improve their health.
+
+6. Improvements:
+Suggest additional lifestyle changes or habits the patient can adopt for better health.
+
+7. Next Steps:
+Recommend a timeline for follow-ups or tests.
 
 Patient Information:
 Name: ${userInfo.name}
@@ -123,8 +143,7 @@ Lab Results:
     prompt += `${key}: ${value}\n`;
   }
 
-  prompt += `
-Provide practical, personalized advice, and always end with a positive and hopeful note.`;
+  prompt += `\nProvide clear explanations and end with an encouraging and positive message.`;
 
   return prompt;
 };
