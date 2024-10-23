@@ -2,6 +2,7 @@ require('dotenv').config();
 const OpenAI = require('openai');
 const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
+const { PDFDocument } = require('pdf-lib');
 
 // Ensure OpenAI API key is set
 if (!process.env.OPENAI_API_KEY) {
@@ -21,15 +22,11 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Extract text from the file
-    let extractedText = '';
+    // Extract text from the file (handle all formats)
+    let extractedText = await extractTextFromFile(file);
 
-    if (file.mimetype === 'application/pdf') {
-      extractedText = await extractTextFromPDF(file.buffer);
-    } else if (['image/jpeg', 'image/png'].includes(file.mimetype)) {
-      extractedText = await extractTextFromImage(file.buffer);
-    } else {
-      return res.status(400).json({ error: 'Unsupported file type' });
+    if (!extractedText) {
+      return res.status(400).json({ error: 'Unable to extract text from the uploaded file' });
     }
 
     // Analyze the extracted text and get the summary
@@ -42,7 +39,32 @@ exports.analyzeReport = async (req, res) => {
   }
 };
 
-// Extract text from a PDF buffer
+// Function to handle text extraction from various file types
+const extractTextFromFile = async (file) => {
+  if (file.mimetype === 'application/pdf') {
+    const isImageBased = await isPDFImageBased(file.buffer);
+    if (isImageBased) {
+      return extractTextFromImageBasedPDF(file.buffer);  // Use OCR for image-based PDFs
+    } else {
+      return extractTextFromPDF(file.buffer);  // Use pdf-parse for text-based PDFs
+    }
+  } else if (['image/jpeg', 'image/png'].includes(file.mimetype)) {
+    return extractTextFromImage(file.buffer);  // Use Tesseract for image files
+  } else {
+    throw new Error('Unsupported file type');
+  }
+};
+
+// Check if the PDF is image-based (i.e., scanned)
+const isPDFImageBased = async (buffer) => {
+  const pdfDoc = await PDFDocument.load(buffer);
+  const numPages = pdfDoc.getPageCount();
+  const page = pdfDoc.getPage(0);
+  const text = await page.getTextContent();
+  return text.items.length === 0;  // If no text content, it's likely image-based
+};
+
+// Extract text from a text-based PDF buffer
 const extractTextFromPDF = async (buffer) => {
   try {
     const data = await pdfParse(buffer);
@@ -53,7 +75,28 @@ const extractTextFromPDF = async (buffer) => {
   }
 };
 
-// Extract text from an image buffer using Tesseract
+// Extract text from an image-based PDF using OCR (Tesseract.js)
+const extractTextFromImageBasedPDF = async (buffer) => {
+  try {
+    const pdfDoc = await PDFDocument.load(buffer);
+    const numPages = pdfDoc.getPageCount();
+    let fullText = '';
+
+    for (let i = 0; i < numPages; i++) {
+      const page = pdfDoc.getPage(i);
+      const pageImage = await page.renderToImage({ format: 'png' });
+      const { data: { text } } = await Tesseract.recognize(pageImage, 'eng');
+      fullText += text + '\n';
+    }
+
+    return fullText;
+  } catch (error) {
+    console.error('Error extracting text from image-based PDF:', error.message);
+    throw new Error('Image-based PDF processing failed');
+  }
+};
+
+// Extract text from an image buffer using Tesseract.js
 const extractTextFromImage = async (buffer) => {
   try {
     const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
