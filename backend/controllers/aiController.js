@@ -203,7 +203,7 @@ const analyzeExtractedText = async (extractedText) => {
     const response = await openai.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 1500,  // Increased token limit for more detailed output
+      max_tokens: 3000,  // Increased token limit for more detailed output
       temperature: 0.3,  // Slightly higher for more creative output
     });
 
