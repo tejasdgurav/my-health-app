@@ -130,92 +130,72 @@ const extractTextFromImageBasedPDF = async (buffer) => {
   }
 };
 
-// Analyze the extracted text by sending it to OpenAI and ensuring no hallucinations
+// Analyze the extracted text by sending it to OpenAI with a detailed and flexible prompt
 const analyzeExtractedText = async (extractedText) => {
   const prompt = `
-    I want you to act as a highly empathetic and clear medical expert who explains complex medical diagnoses and conditions in a way that is easy to understand for a non-medical person. Your task is to generate a comprehensive health report based on the provided health report and any medical conditions or diagnoses included.
+    I want you to act as a highly empathetic and clear medical expert who explains complex medical diagnoses and conditions in a way that is easy to understand for a non-medical person. 
+    Your task is to generate a comprehensive health report based on the provided health report and any medical conditions or diagnoses included. 
+    This report must follow exactly this structure and format, but be adaptable to any health conditions and diagnoses:
 
-    This report should be broken down into the following sections:
-
-    1. **Quick Snapshot (Overview)**:
-    - Start with a brief summary of the patient’s health:
-    - Age and Gender of the patient.
-    - Key diagnoses or conditions (e.g., hypothyroidism, diabetes, hypertension, etc.).
-    - A list of medications the patient is taking, with a brief explanation of what each medication does.
-    - A "Good, Needs Attention, Critical" section:
-      - **Good**: Highlight aspects of the patient’s health that are stable or within normal ranges.
-      - **Needs Attention**: Mention any areas that require monitoring or adjustment.
-      - **Critical**: Identify any critical conditions or risks that require immediate attention or strict adherence to treatment.
-
-    2. **Detailed Health Report**:
-    This section should include a detailed analysis of each health condition or diagnosis. Break down each condition with equal emphasis on all conditions while prioritizing the most critical ones.
-
-    **What’s Going On?** 
-    Explain what the health conditions are, their potential causes, and how they are affecting the patient. Use simple, plain language so the patient can understand what is happening in their body.
-
-    For each condition, break it down as follows:
-    - **Condition 1 (e.g., Hypothyroidism)**:
-      - **What is it?**: A simple explanation of the condition and how it affects the body.
-      - **Why does it happen?**: Briefly explain the cause or possible cause of the condition (e.g., autoimmune disease, lifestyle factors, etc.).
-      - **Symptoms**: List the common symptoms associated with the condition that the patient might experience.
+    Quick Snapshot for [Patient Name]:
+    - Age: [Patient Age]
+    - Diagnoses: [List of diagnoses, e.g., Hypothyroidism, Diabetes, Hypertension, etc.]
     
-    - **Condition 2 (e.g., Overweight/BMI)**:
-      - **What is it?**: Explain BMI and what the patient’s BMI means.
-      - **Why does it matter?**: Explain the importance of BMI and how being overweight affects overall health.
-      - **What can cause it?**: Mention relevant factors like metabolism, thyroid issues, diet, and physical activity.
+    Current Medications:
+    - List each medication with a brief explanation of what it does, e.g., "Medication Name: Brief explanation of its purpose."
+
+    General Health Overview:
+    - Good: Highlight aspects of the patient’s health that are stable or within normal ranges (e.g., "Your blood pressure is stable.")
+    - Needs Attention: Mention any areas that require monitoring or adjustment (e.g., elevated BMI, glucose levels).
+    - Critical: Identify critical conditions that need immediate attention (e.g., "It is critical to monitor blood sugar levels to avoid diabetes complications.").
+
+    Detailed Health Report for [Patient Name]
+
+    What’s Going On?
+    Explain what the health conditions are, their potential causes, and how they are affecting the patient. Use simple, plain language to describe each condition and how it affects the body.
+
+    For each condition, explain:
+    - What is it?: Describe the condition and its significance to the patient’s health.
+    - Why does it happen?: Explain the cause or possible causes of the condition (e.g., autoimmune disease, poor lifestyle, genetics).
+    - Symptoms: List common symptoms associated with the condition.
+
+    What You Should Do
+    Provide actionable recommendations for managing each condition. Tailor this advice to the specific condition.
+
+    - Condition 1 (e.g., Hypothyroidism):
+      - Medication: Explain how the patient should manage their medication (e.g., "Take your thyroid medication daily to keep your hormone levels balanced.").
+      - Lifestyle: Provide lifestyle recommendations like diet, exercise, and stress management.
+      - Monitoring: Explain the importance of regular follow-up checks (e.g., "Monitor your thyroid function with blood tests every 6 months.").
+
+    - Condition 2 (e.g., Diabetes):
+      - Diet and Exercise: Provide practical suggestions for improving diet and staying active to manage diabetes.
+      - Monitoring: Remind the patient to regularly check their blood sugar levels.
     
-    - **Condition 3 (e.g., Hypertension/Blood Pressure)**:
-      - **What does this number mean?**: Explain the patient’s blood pressure readings and what they indicate.
-      - **Why does it matter?**: Explain how blood pressure affects the heart and other organs.
-      - **What can cause it?**: List possible contributing factors such as weight, thyroid issues, diet, and stress.
+    - Condition 3 (e.g., Hypertension):
+      - Monitoring: Recommend regular blood pressure monitoring and when to alert the doctor.
+      - Lifestyle: Offer advice to reduce salt intake, increase potassium, and stay active.
 
-    3. **What You Should Do**:
-    Provide actionable recommendations for managing each condition. Break this down by:
-    - **Condition 1 (e.g., Hypothyroidism)**:
-      - **Medication**: Explain the importance of taking prescribed medication and how it works.
-      - **Lifestyle**: Provide lifestyle tips like diet, exercise, and stress management to support the condition.
-      - **Monitoring**: Explain the importance of regular monitoring (e.g., thyroid function tests, blood sugar levels, etc.).
-    
-    - **Condition 2 (e.g., Overweight/BMI)**:
-      - **Diet and Exercise**: Offer simple suggestions for improving diet and physical activity.
-      - **Stress Management**: Recommend stress-relieving activities to support weight management and general health.
-    
-    - **Condition 3 (e.g., Blood Pressure)**:
-      - **Monitoring**: Recommend regular blood pressure checks and when to alert the doctor.
-      - **Lifestyle Tips**: Suggest ways to reduce salt, increase potassium, and stay active.
+    Why It All Matters
+    Explain why managing these conditions is important. Describe how the conditions may be interconnected and how controlling one can benefit the others. 
 
-    4. **Why It All Matters**:
-    Explain why managing these conditions is important and how they are interconnected. For example:
-    - How hypothyroidism affects weight and energy levels.
-    - How extra weight raises blood pressure.
-    - How controlling blood pressure reduces the risk of heart disease or strokes.
-    Make it clear that addressing each condition improves overall health and reduces the risk of complications.
+    What to Watch For
+    Provide a list of warning signs or symptoms that the patient should be aware of, including:
+    - Energy Levels: Watch for fatigue that may indicate a need for medication adjustment.
+    - Blood Sugar: Remind the patient to monitor blood sugar to avoid complications.
+    - Blood Pressure: Keep an eye on blood pressure and notify the doctor if it exceeds a certain threshold.
 
-    5. **What to Watch For**:
-    Provide a list of warning signs or symptoms the patient should monitor for each condition. For example:
-    - If their energy levels drop, they may need a thyroid medication adjustment.
-    - If their blood pressure rises above a certain level, they should consult their doctor.
+    Next Steps
+    Provide a clear list of next steps, including:
+    - Medication: Continue taking prescribed medications.
+    - Follow-Up Appointments: Recommend when the patient should schedule their next doctor’s visit.
+    - Lifestyle Adjustments: Encourage small, positive changes in diet and physical activity.
 
-    6. **Next Steps**:
-    Provide a clear list of next steps for the patient:
-    - **Medication**: Reinforce the importance of adhering to prescribed medication schedules.
-    - **Follow-up Appointments**: Suggest when the patient should schedule their next doctor visit or blood tests to monitor progress.
-    - **Lifestyle Recommendations**: Encourage small, positive changes that will improve their condition over time.
+    In Summary
+    - Reassure the patient that their conditions are manageable with proper care.
+    - Highlight the key actions they need to take to stay in control of their health.
+    - Provide encouragement and emphasize that by following these steps, they are on the path to better health.
 
-    7. **In Summary**:
-    Wrap up the report with a clear and concise summary:
-    - Reassure the patient that their conditions are manageable with proper medication, monitoring, and lifestyle changes.
-    - Highlight the key actions they should take to stay in control of their health.
-    - Provide encouragement and remind them they’re already taking the right steps.
-
-    **Key Guidelines for Writing the Report**:
-    - Use empathetic, supportive language that helps the patient feel informed and in control.
-    - Avoid medical jargon. If a medical term must be used, provide a simple explanation.
-    - Provide actionable advice in a clear and concise manner that the patient can follow.
-    - Emphasize the interconnectedness of their health conditions and why managing each one helps overall well-being.
-    - Keep the tone positive and reassuring, ensuring the patient knows their conditions can be managed.
-  
-    Here's the report text:
+    Here’s the extracted report:
     "${extractedText}"
   `;
 
@@ -224,7 +204,7 @@ const analyzeExtractedText = async (extractedText) => {
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
-      temperature: 0.2,  // Low temperature to avoid creative outputs and stick to facts
+      temperature: 0.2,  // Low temperature to ensure factual accuracy
     });
 
     return response.choices[0].message.content.trim();
