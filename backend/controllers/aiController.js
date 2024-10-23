@@ -201,10 +201,10 @@ const analyzeExtractedText = async (extractedText) => {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500,
-      temperature: 0.2,  // Low temperature to ensure factual accuracy
+      max_tokens: 1500,  // Increased token limit for more detailed output
+      temperature: 0.3,  // Slightly higher for more creative output
     });
 
     return response.choices[0].message.content.trim();
