@@ -17,7 +17,6 @@ const openai = new OpenAI({
 exports.analyzeReport = async (req, res) => {
   try {
     const file = req.file;
-    const userInfo = JSON.parse(req.body.userInfo);
 
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -35,10 +34,10 @@ exports.analyzeReport = async (req, res) => {
     }
 
     // Parse health metrics from extracted text
-    const metrics = parseHealthMetrics(extractedText, userInfo);
+    const metrics = parseHealthMetrics(extractedText);
 
-    // Generate AI prompt with patient information and metrics
-    const prompt = generatePrompt(userInfo, metrics);
+    // Generate AI prompt with metrics only from the report
+    const prompt = generatePrompt(metrics);
 
     // Get AI-generated summary
     const summary = await getAISummary(prompt);
@@ -73,7 +72,7 @@ const extractTextFromImage = async (buffer) => {
 };
 
 // Parse health metrics from the extracted text
-const parseHealthMetrics = (text, userInfo) => {
+const parseHealthMetrics = (text) => {
   const metrics = {};
   const lines = text.split('\n');
 
@@ -105,21 +104,21 @@ const extractValue = (line) => {
   return match ? parseFloat(match[0]) : null;
 };
 
-// Generate a prompt to send to OpenAI with patient info and metrics
-const generatePrompt = (userInfo, metrics) => {
-  let prompt = `You are a medical expert providing a simple, empathetic one-page health summary for a patient based on their medical report. Use the following structure:
+// Generate a prompt to send to OpenAI with metrics only
+const generatePrompt = (metrics) => {
+  let prompt = `You are a medical expert providing a simple, empathetic one-page health summary for a patient based only on their medical report. Use the following structure:
 
 1. Health Summary:
-Start with the patient's name, age, and a brief overview of their main health conditions. Mention any specific symptoms and explain how their condition relates to these symptoms. Provide a short assessment of their BMI and blood pressure.
+Provide an overview based on the lab results. Mention any notable findings related to key health conditions, such as glucose, cholesterol, liver enzymes (ALT, AST), etc.
 
 2. What’s Good:
-Highlight the positive aspects of the patient's health, such as well-controlled conditions or healthy values in lab results.
+Highlight the positive aspects of the lab results, such as values within the normal range.
 
 3. What Needs Attention:
-Point out any aspects of their health that are slightly out of range, like elevated BMI or blood pressure, and explain why these need attention.
+Point out any slightly out-of-range values that require monitoring or lifestyle changes.
 
 4. What’s Critical:
-Identify any serious concerns the patient should be aware of, and recommend immediate action if needed.
+Identify any serious concerns that the patient should be aware of, and recommend immediate action if needed.
 
 5. What You Should Do:
 Provide clear, actionable steps the patient should take to maintain or improve their health.
@@ -129,12 +128,6 @@ Suggest additional lifestyle changes or habits the patient can adopt for better 
 
 7. Next Steps:
 Recommend a timeline for follow-ups or tests.
-
-Patient Information:
-Name: ${userInfo.name}
-Age: ${userInfo.age}
-Gender: ${userInfo.gender}
-Known Medical Conditions: ${userInfo.conditions}
 
 Lab Results:
 `;
