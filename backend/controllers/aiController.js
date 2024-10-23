@@ -3,6 +3,7 @@ const OpenAI = require('openai');
 const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
 const { PDFDocument } = require('pdf-lib');
+const sharp = require('sharp');  // For image preprocessing
 
 // Ensure OpenAI API key is set
 if (!process.env.OPENAI_API_KEY) {
@@ -28,8 +29,8 @@ exports.analyzeReport = async (req, res) => {
       return '';  // Continue even if text extraction fails
     });
 
-    if (!extractedText) {
-      extractedText = 'No text could be extracted from the report.';
+    if (!extractedText || extractedText.trim() === '') {
+      extractedText = 'No readable text could be extracted from the report.';
     }
 
     // Analyze the extracted text and get the summary
@@ -90,7 +91,7 @@ const extractTextFromPDF = async (buffer) => {
   }
 };
 
-// Extract text from an image-based PDF using OCR (Tesseract.js)
+// Extract text from an image-based PDF using OCR (Tesseract.js) with image preprocessing
 const extractTextFromImageBasedPDF = async (buffer) => {
   try {
     const pdfDoc = await PDFDocument.load(buffer);
@@ -100,7 +101,14 @@ const extractTextFromImageBasedPDF = async (buffer) => {
     for (let i = 0; i < numPages; i++) {
       const page = pdfDoc.getPage(i);
       const pageImage = await page.renderToImage({ format: 'png' });
-      const { data: { text } } = await Tesseract.recognize(pageImage, 'eng');
+      
+      // Preprocess image using sharp before sending to Tesseract
+      const processedImage = await sharp(pageImage)
+        .greyscale()
+        .normalize()
+        .toBuffer();
+        
+      const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
       fullText += text + '\n';
     }
 
@@ -111,10 +119,16 @@ const extractTextFromImageBasedPDF = async (buffer) => {
   }
 };
 
-// Extract text from an image buffer using Tesseract.js
+// Extract text from an image buffer using Tesseract.js with image preprocessing
 const extractTextFromImage = async (buffer) => {
   try {
-    const { data: { text } } = await Tesseract.recognize(buffer, 'eng');
+    // Preprocess the image to enhance readability
+    const processedImage = await sharp(buffer)
+      .greyscale()
+      .normalize()
+      .toBuffer();
+
+    const { data: { text } } = await Tesseract.recognize(processedImage, 'eng');
     return text || 'No text extracted from image.';
   } catch (error) {
     console.error('Error extracting text from image:', error.message);
