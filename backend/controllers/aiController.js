@@ -104,7 +104,9 @@ const extractTextFromImageBasedPDF = async (buffer) => {
       
       // Preprocess image using sharp before sending to Tesseract
       const processedImage = await sharp(pageImage)
+        .resize(2000) // Resize for better OCR performance
         .greyscale()
+        .sharpen()
         .normalize()
         .toBuffer();
         
@@ -124,7 +126,9 @@ const extractTextFromImage = async (buffer) => {
   try {
     // Preprocess the image to enhance readability
     const processedImage = await sharp(buffer)
+      .resize(2000)  // Resize to improve OCR performance
       .greyscale()
+      .sharpen()
       .normalize()
       .toBuffer();
 
