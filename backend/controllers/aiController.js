@@ -1,6 +1,5 @@
 require('dotenv').config();
 const OpenAI = require('openai');
-const fs = require('fs');
 const Tesseract = require('tesseract.js');
 const pdfParse = require('pdf-parse');
 
@@ -33,14 +32,8 @@ exports.analyzeReport = async (req, res) => {
       return res.status(400).json({ error: 'Unsupported file type' });
     }
 
-    // Parse health metrics from extracted text
-    const metrics = parseHealthMetrics(extractedText);
-
-    // Generate AI prompt with metrics only from the report
-    const prompt = generatePrompt(metrics);
-
-    // Get AI-generated summary
-    const summary = await getAISummary(prompt);
+    // Analyze the extracted text and get the summary
+    const summary = await analyzeExtractedText(extractedText);
 
     res.json({ summary });
   } catch (error) {
@@ -71,85 +64,34 @@ const extractTextFromImage = async (buffer) => {
   }
 };
 
-// Parse health metrics from the extracted text
-const parseHealthMetrics = (text) => {
-  const metrics = {};
-  const lines = text.split('\n');
+// Analyze the extracted text by sending it to OpenAI and ensuring no hallucinations
+const analyzeExtractedText = async (extractedText) => {
+  // Restrict AI to focus only on the data in the report
+  const prompt = `You are an AI assistant tasked with analyzing a medical report. 
+Your job is to provide an accurate summary based only on the facts present in the report. 
+Do not make assumptions, do not hallucinate any data, and only summarize the information that is present in the report. 
 
-  lines.forEach((line) => {
-    const lowerLine = line.toLowerCase();
+Here is the report text: 
+"${extractedText}"
 
-    // Extract common health metrics
-    if (lowerLine.includes('glucose')) {
-      metrics.glucose = extractValue(line);
-    }
-    if (lowerLine.includes('cholesterol')) {
-      metrics.cholesterol = extractValue(line);
-    }
-    if (lowerLine.includes('alt') || lowerLine.includes('sgpt')) {
-      metrics.alt = extractValue(line);
-    }
-    if (lowerLine.includes('ast') || lowerLine.includes('sgot')) {
-      metrics.ast = extractValue(line);
-    }
-    // Add more metrics as necessary
-  });
+Please provide a clear, simple, and understandable health summary for the patient using the following format:
 
-  return metrics;
-};
+1. Health Summary: Provide an overview of the patient's health based strictly on the report. No assumptions.
+2. What’s Good: Highlight the positive aspects from the report.
+3. What Needs Attention: Mention the aspects that need monitoring or are slightly out of range.
+4. What’s Critical: Mention any critical aspects that the patient should be aware of.
+5. What You Should Do: Suggest clear next steps based on the report data. No new data should be introduced.
 
-// Extract numerical value from a line of text
-const extractValue = (line) => {
-  const match = line.match(/(\d+\.?\d*)/);
-  return match ? parseFloat(match[0]) : null;
-};
+Ensure the language is simple and clear, and the summary reflects exactly what is present in the report.`;
 
-// Generate a prompt to send to OpenAI with metrics only
-const generatePrompt = (metrics) => {
-  let prompt = `You are a medical expert providing a simple, empathetic one-page health summary for a patient based only on their medical report. Use the following structure:
-
-1. Health Summary:
-Provide an overview based on the lab results. Mention any notable findings related to key health conditions, such as glucose, cholesterol, liver enzymes (ALT, AST), etc.
-
-2. What’s Good:
-Highlight the positive aspects of the lab results, such as values within the normal range.
-
-3. What Needs Attention:
-Point out any slightly out-of-range values that require monitoring or lifestyle changes.
-
-4. What’s Critical:
-Identify any serious concerns that the patient should be aware of, and recommend immediate action if needed.
-
-5. What You Should Do:
-Provide clear, actionable steps the patient should take to maintain or improve their health.
-
-6. Improvements:
-Suggest additional lifestyle changes or habits the patient can adopt for better health.
-
-7. Next Steps:
-Recommend a timeline for follow-ups or tests.
-
-Lab Results:
-`;
-
-  for (const [key, value] of Object.entries(metrics)) {
-    prompt += `${key}: ${value}\n`;
-  }
-
-  prompt += `\nProvide clear explanations and end with an encouraging and positive message.`;
-
-  return prompt;
-};
-
-// Send the generated prompt to OpenAI and get a summary back
-const getAISummary = async (prompt) => {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
-      temperature: 0.7,
+      temperature: 0.2,  // Low temperature to avoid creative outputs and stick to facts
     });
+
     return response.choices[0].message.content.trim();
   } catch (error) {
     console.error('Error with AI API:', error.response ? error.response.data : error.message);
